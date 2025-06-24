@@ -1,11 +1,32 @@
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using ClosedXML.Excel;
+using System;
+using System.Linq;
 
 namespace IMLoader
 {
     public static class ExcelHelper
     {
+        private static bool TryParseDate(IXLCell cell, out DateTime date)
+        {
+            date = default;
+            if (cell.DataType == XLDataType.DateTime)
+            {
+                date = cell.GetDateTime();
+                return true;
+            }
+            string dateString = cell.GetString().Trim();
+            if (string.IsNullOrWhiteSpace(dateString)) return false;
+
+            string[] formats = { "yyyy/MM/dd", "dd/MM/yyyy", "MM/dd/yyyy", "yyyy-MM-dd", "dd-MM-yyyy", "MM-dd-yyyy", "M/d/yyyy" };
+            if (DateTime.TryParseExact(dateString, formats, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out date))
+            {
+                return true;
+            }
+            return DateTime.TryParse(dateString, out date);
+        }
+
         public static List<string> GetSheetNames(string filePath)
         {
             var sheetNames = new List<string>();
@@ -53,6 +74,12 @@ namespace IMLoader
             if (!masterWb.Worksheets.TryGetWorksheet(masterSheet, out var masterWs) || masterWs == null)
                 throw new ArgumentException($"Sheet '{masterSheet}' not found in master file.");
             var masterHeaders = masterWs.Row(1).CellsUsed().Select(c => c.GetString()).ToList();
+
+            int masterNextDateIdx = masterHeaders.FindIndex(h => h.Trim().Equals("Next Date", StringComparison.OrdinalIgnoreCase));
+            int masterReoccurringIdx = masterHeaders.FindIndex(h => h.Trim().Equals("Reoccurring", StringComparison.OrdinalIgnoreCase));
+            int masterLastDateIdx = masterHeaders.FindIndex(h => h.Trim().Equals("Last Date", StringComparison.OrdinalIgnoreCase));
+            int masterIntervalIdx = masterHeaders.FindIndex(h => h.Trim().Equals("Desired Interval", StringComparison.OrdinalIgnoreCase));
+
             int masterColCount = masterHeaders.Count;
             var lastRow = masterWs.LastRowUsed();
             int masterLastRow = lastRow != null ? lastRow.RowNumber() : 1; // 1 = header row, so data starts at 2
@@ -100,9 +127,48 @@ namespace IMLoader
                 {
                     var dataRow = ws.Row(row);
                     if (dataRow.IsEmpty()) break;
+
+                    DateTime? calculatedNextDate = null;
+
+                    if (masterNextDateIdx != -1 && masterReoccurringIdx != -1 && masterLastDateIdx != -1 && masterIntervalIdx != -1)
+                    {
+                        int srcNextDateIdx = headerMap[masterNextDateIdx];
+                        int srcReoccurringIdx = headerMap[masterReoccurringIdx];
+                        int srcLastDateIdx = headerMap[masterLastDateIdx];
+                        int srcIntervalIdx = headerMap[masterIntervalIdx];
+
+                        if (srcReoccurringIdx != -1 && srcLastDateIdx != -1 && srcIntervalIdx != -1)
+                        {
+                            var nextDateCell = (srcNextDateIdx != -1) ? dataRow.Cell(srcNextDateIdx + 1) : null;
+                            var reoccurringCell = dataRow.Cell(srcReoccurringIdx + 1);
+
+                            bool isReoccurring = false;
+                            if (reoccurringCell.DataType == XLDataType.Boolean) isReoccurring = reoccurringCell.GetBoolean();
+                            else if (reoccurringCell.DataType == XLDataType.Text) bool.TryParse(reoccurringCell.GetString(), out isReoccurring);
+
+                            if (!isReoccurring && (nextDateCell == null || nextDateCell.IsEmpty()))
+                            {
+                                var lastDateCell = dataRow.Cell(srcLastDateIdx + 1);
+                                var intervalCell = dataRow.Cell(srcIntervalIdx + 1);
+                                if (TryParseDate(lastDateCell, out DateTime lastDate) && intervalCell.TryGetValue(out double intervalMonths))
+                                {
+                                    calculatedNextDate = lastDate.AddMonths((int)intervalMonths);
+                                }
+                            }
+                        }
+                    }
+
                     var newRow = masterWs.Row(++masterLastRow);
                     for (int col = 0; col < masterColCount; col++)
                     {
+                        if (col == masterNextDateIdx && calculatedNextDate.HasValue)
+                        {
+                            var cell = newRow.Cell(col + 1);
+                            cell.Value = calculatedNextDate.Value;
+                            cell.Style.NumberFormat.Format = "yyyy-MM-dd";
+                            continue;
+                        }
+
                         if (col == 0)
                         {
                             newRow.Cell(1).Value = unitNumber;
