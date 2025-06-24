@@ -226,8 +226,8 @@ namespace IMLoader
             var rowsToMerge = new List<(int unitNumber, List<XLCellValue> rowData)>();
             int masterColCount = masterHeaders.Count;
 
-            // First, collect existing data from master file (after row 2)
-            var existingRows = masterWs.Rows(3, masterWs.LastRowUsed()?.RowNumber() ?? 2);
+            // First, collect existing data from master file (after row 1)
+            var existingRows = masterWs.Rows(2, masterWs.LastRowUsed()?.RowNumber() ?? 1);
             foreach (var row in existingRows)
             {
                 var unitCell = row.Cell(1);
@@ -307,9 +307,16 @@ namespace IMLoader
                     }
                 }
 
+                // Find Equipment ID column index in the source file
+                int equipmentIdIdx = headers.FindIndex(h => h.Trim().Equals("Equipment ID", StringComparison.OrdinalIgnoreCase));
+                if (equipmentIdIdx == -1)
+                    throw new ArgumentException($"'Equipment ID' column not found in file '{filePath}'.");
+
                 string unitNumberStr = ExtractUnitNumberFromFileName(filePath);
                 if (int.TryParse(unitNumberStr, out int unitNumber))
                 {
+                    // Collect all data rows for this file
+                    var fileRows = new List<(string equipmentId, List<XLCellValue> rowData)>();
                     int row = 2;
                     while (true)
                     {
@@ -356,10 +363,8 @@ namespace IMLoader
                         }
 
                         var rowData = new List<XLCellValue>();
-                        
                         // Add unit number as first column
                         rowData.Add(unitNumber.ToString());
-
                         // Add rest of the columns
                         for (int col = 1; col < masterColCount; col++)
                         {
@@ -373,7 +378,6 @@ namespace IMLoader
                             if (srcCol >= 0)
                             {
                                 var sourceCell = ws.Cell(row, srcCol + 1);
-                                
                                 // Handle date columns
                                 if (col == masterLastDateIdx || col == masterNextDateIdx)
                                 {
@@ -401,9 +405,17 @@ namespace IMLoader
                                 rowData.Add("");
                             }
                         }
-
-                        rowsToMerge.Add((unitNumber, rowData));
+                        // Get Equipment ID value for this row
+                        string equipmentId = dataRow.Cell(equipmentIdIdx + 1).GetString().Trim();
+                        fileRows.Add((equipmentId, rowData));
                         row++;
+                    }
+                    // Sort fileRows by equipmentId (string sort, preserves leading zeros)
+                    fileRows.Sort((a, b) => string.Compare(a.equipmentId, b.equipmentId, StringComparison.Ordinal));
+                    // Add sorted rows to the global rowsToMerge
+                    foreach (var (_, rowData) in fileRows)
+                    {
+                        rowsToMerge.Add((unitNumber, rowData));
                     }
                 }
             }
