@@ -188,28 +188,31 @@ namespace IMLoader
                 }
             }
 
-            // Normalize existing "Reoccurring" data in master file
-            if (masterReoccurringIdx != -1)
+            // Store all rows to be merged, along with their unit numbers
+            var rowsToMerge = new List<(int unitNumber, List<XLCellValue> rowData)>();
+            int masterColCount = masterHeaders.Count;
+
+            // First, collect existing data from master file (after row 2)
+            var existingRows = masterWs.Rows(3, masterWs.LastRowUsed()?.RowNumber() ?? 2);
+            foreach (var row in existingRows)
             {
-                var reoccurringColumn = masterWs.Column(masterReoccurringIdx + 1);
-                // Start from row 3 to skip header and filter rows
-                foreach (var cell in reoccurringColumn.CellsUsed(c => c.Address.RowNumber >= 3))
+                var unitCell = row.Cell(1);
+                if (!unitCell.IsEmpty())
                 {
-                    if (cell.DataType == XLDataType.Text)
+                    string unitStr = unitCell.GetString().Trim();
+                    if (int.TryParse(unitStr, out int unitNum))
                     {
-                        string originalValue = cell.GetString().Trim();
-                        if (bool.TryParse(originalValue, out bool boolValue))
+                        var rowData = new List<XLCellValue>();
+                        for (int col = 1; col <= masterColCount; col++)
                         {
-                            cell.Value = boolValue ? "True" : "False";
+                            rowData.Add(row.Cell(col).Value);
                         }
+                        rowsToMerge.Add((unitNum, rowData));
                     }
                 }
             }
 
-            int masterColCount = masterHeaders.Count;
-            var lastRow = masterWs.LastRowUsed();
-            int masterLastRow = lastRow != null ? lastRow.RowNumber() : 1; // 1 = header row, so data starts at 2
-
+            // Process files to merge
             foreach (var (filePath, sheetName) in filesToMerge)
             {
                 using var wb = new XLWorkbook(filePath);
@@ -262,103 +265,136 @@ namespace IMLoader
                     }
                 }
 
-                string unitNumber = ExtractUnitNumberFromFileName(filePath);
-                int row = 2;
-                while (true)
+                string unitNumberStr = ExtractUnitNumberFromFileName(filePath);
+                if (int.TryParse(unitNumberStr, out int unitNumber))
                 {
-                    var dataRow = ws.Row(row);
-                    if (dataRow.IsEmpty()) break;
-
-                    DateTime? calculatedNextDate = null;
-
-                    if (masterNextDateIdx != -1 && masterReoccurringIdx != -1 && masterLastDateIdx != -1 && masterIntervalIdx != -1)
+                    int row = 2;
+                    while (true)
                     {
-                        int srcNextDateIdx = headerMap[masterNextDateIdx];
-                        int srcReoccurringIdx = headerMap[masterReoccurringIdx];
-                        int srcLastDateIdx = headerMap[masterLastDateIdx];
-                        int srcIntervalIdx = headerMap[masterIntervalIdx];
+                        var dataRow = ws.Row(row);
+                        if (dataRow.IsEmpty()) break;
 
-                        if (srcReoccurringIdx != -1 && srcLastDateIdx != -1 && srcIntervalIdx != -1)
+                        DateTime? calculatedNextDate = null;
+
+                        if (masterNextDateIdx != -1 && masterReoccurringIdx != -1 && masterLastDateIdx != -1 && masterIntervalIdx != -1)
                         {
-                            var nextDateCell = (srcNextDateIdx != -1) ? dataRow.Cell(srcNextDateIdx + 1) : null;
-                            var reoccurringCell = dataRow.Cell(srcReoccurringIdx + 1);
-                            var lastDateCell = dataRow.Cell(srcLastDateIdx + 1);
+                            int srcNextDateIdx = headerMap[masterNextDateIdx];
+                            int srcReoccurringIdx = headerMap[masterReoccurringIdx];
+                            int srcLastDateIdx = headerMap[masterLastDateIdx];
+                            int srcIntervalIdx = headerMap[masterIntervalIdx];
 
-                            // Ensure Last Date is formatted before using it
-                            FormatDateCell(lastDateCell);
-
-                            bool isReoccurring = false;
-                            if (reoccurringCell.DataType == XLDataType.Boolean) isReoccurring = reoccurringCell.GetBoolean();
-                            else if (reoccurringCell.DataType == XLDataType.Text) bool.TryParse(reoccurringCell.GetString(), out isReoccurring);
-
-                            if (!isReoccurring && (nextDateCell == null || nextDateCell.IsEmpty()))
+                            if (srcReoccurringIdx != -1 && srcLastDateIdx != -1 && srcIntervalIdx != -1)
                             {
-                                var intervalCell = dataRow.Cell(srcIntervalIdx + 1);
-                                if (TryParseDate(lastDateCell, out DateTime lastDate) && intervalCell.TryGetValue(out double intervalMonths))
-                                {
-                                    calculatedNextDate = lastDate.AddMonths((int)intervalMonths);
-                                }
-                            }
-                        }
-                    }
+                                var nextDateCell = (srcNextDateIdx != -1) ? dataRow.Cell(srcNextDateIdx + 1) : null;
+                                var reoccurringCell = dataRow.Cell(srcReoccurringIdx + 1);
+                                var lastDateCell = dataRow.Cell(srcLastDateIdx + 1);
 
-                    var newRow = masterWs.Row(++masterLastRow);
-                    for (int col = 0; col < masterColCount; col++)
-                    {
-                        if (col == masterNextDateIdx && calculatedNextDate.HasValue)
-                        {
-                            var cell = newRow.Cell(col + 1);
-                            cell.Value = calculatedNextDate.Value;
-                            cell.Style.NumberFormat.Format = "yyyy-MM-dd";
-                            continue;
-                        }
+                                // Ensure Last Date is formatted before using it
+                                FormatDateCell(lastDateCell);
 
-                        if (col == 0)
-                        {
-                            newRow.Cell(1).Value = unitNumber;
-                            continue;
-                        }
+                                bool isReoccurring = false;
+                                if (reoccurringCell.DataType == XLDataType.Boolean) isReoccurring = reoccurringCell.GetBoolean();
+                                else if (reoccurringCell.DataType == XLDataType.Text) bool.TryParse(reoccurringCell.GetString(), out isReoccurring);
 
-                        int srcCol = headerMap[col];
-                        if (srcCol >= 0)
-                        {
-                            var sourceCell = ws.Cell(row, srcCol + 1);
-                            var targetCell = newRow.Cell(col + 1);
-
-                            // For date columns, ensure proper conversion before copying
-                            if (col == masterLastDateIdx || col == masterNextDateIdx)
-                            {
-                                if (TryParseDate(sourceCell, out DateTime dateValue))
+                                if (!isReoccurring && (nextDateCell == null || nextDateCell.IsEmpty()))
                                 {
-                                    targetCell.Value = dateValue;
-                                    targetCell.Style.NumberFormat.Format = "yyyy-MM-dd";
-                                }
-                                else
-                                {
-                                    targetCell.Value = sourceCell.Value;
-                                    FormatDateCell(targetCell);
-                                }
-                            }
-                            else
-                            {
-                                targetCell.Value = sourceCell.Value;
-                                if (col == masterReoccurringIdx && targetCell.DataType == XLDataType.Text)
-                                {
-                                    string originalValue = targetCell.GetString().Trim();
-                                    if (bool.TryParse(originalValue, out bool boolValue))
+                                    var intervalCell = dataRow.Cell(srcIntervalIdx + 1);
+                                    if (TryParseDate(lastDateCell, out DateTime lastDate) && intervalCell.TryGetValue(out double intervalMonths))
                                     {
-                                        targetCell.Value = boolValue ? "True" : "False";
+                                        calculatedNextDate = lastDate.AddMonths((int)intervalMonths);
                                     }
                                 }
                             }
                         }
-                        else
+
+                        var rowData = new List<XLCellValue>();
+                        
+                        // Add unit number as first column
+                        rowData.Add(unitNumber.ToString());
+
+                        // Add rest of the columns
+                        for (int col = 1; col < masterColCount; col++)
                         {
-                            newRow.Cell(col + 1).Value = "";
+                            if (col == masterNextDateIdx && calculatedNextDate.HasValue)
+                            {
+                                rowData.Add(calculatedNextDate.Value);
+                                continue;
+                            }
+
+                            int srcCol = headerMap[col];
+                            if (srcCol >= 0)
+                            {
+                                var sourceCell = ws.Cell(row, srcCol + 1);
+                                
+                                // Handle date columns
+                                if (col == masterLastDateIdx || col == masterNextDateIdx)
+                                {
+                                    if (TryParseDate(sourceCell, out DateTime dateValue))
+                                    {
+                                        rowData.Add(dateValue);
+                                    }
+                                    else
+                                    {
+                                        rowData.Add(sourceCell.Value);
+                                    }
+                                }
+                                // Handle Reoccurring column
+                                else if (col == masterReoccurringIdx && sourceCell.DataType == XLDataType.Text)
+                                {
+                                    string originalValue = sourceCell.GetString().Trim();
+                                    if (bool.TryParse(originalValue, out bool boolValue))
+                                    {
+                                        rowData.Add(boolValue ? "True" : "False");
+                                    }
+                                    else
+                                    {
+                                        rowData.Add(sourceCell.Value);
+                                    }
+                                }
+                                else
+                                {
+                                    rowData.Add(sourceCell.Value);
+                                }
+                            }
+                            else
+                            {
+                                rowData.Add("");
+                            }
                         }
+
+                        rowsToMerge.Add((unitNumber, rowData));
+                        row++;
                     }
-                    row++;
                 }
+            }
+
+            // Sort all rows by unit number
+            rowsToMerge.Sort((a, b) => a.unitNumber.CompareTo(b.unitNumber));
+
+            // Clear existing data (after row 2) and write sorted data
+            var lastUsedRow = masterWs.LastRowUsed();
+            if (lastUsedRow != null && lastUsedRow.RowNumber() > 2)
+            {
+                masterWs.Rows(3, lastUsedRow.RowNumber()).Delete();
+            }
+
+            // Write sorted data back to worksheet
+            int currentRow = 3;
+            foreach (var (_, rowData) in rowsToMerge)
+            {
+                var newRow = masterWs.Row(currentRow);
+                for (int col = 0; col < rowData.Count; col++)
+                {
+                    var cell = newRow.Cell(col + 1);
+                    cell.Value = rowData[col];
+
+                    // Apply formatting for date columns
+                    if (col == masterLastDateIdx || col == masterNextDateIdx)
+                    {
+                        FormatDateCell(cell);
+                    }
+                }
+                currentRow++;
             }
 
             // Final pass to ensure all date columns are properly formatted
