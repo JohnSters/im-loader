@@ -13,16 +13,22 @@ A WPF desktop application for merging and consolidating data from multiple Excel
 - **Header-Aware Merging:**
   - Only columns present in the master are merged.
   - Data is appended to the master, starting after the last data row.
-  - Skips row 2 in all files (assumed to be filter/dropdown row); data starts at row 3.
+  - Skips row 1 in all files (assumed to be header); data starts at row 2.
 - **Unit Number Extraction:**
   - Extracts the unit/plant number from each file's name (e.g., `CT004_IM Load_PROD_20210506.xlsx` → Unit: `4`).
   - Sets column A ("Unit") for every merged row to this extracted value.
 - **Sheet Selection:**
   - User can select which sheet/tab to use for each file.
+- **Sorting:**
+  - All merged data is sorted by Unit number (ascending), regardless of file upload order.
+  - Each file's data is also sorted by the "Equipment ID" column (ascending, string sort, preserves leading zeros) before merging.
 - **Export:**
   - Save the merged result as a new Excel file.
 - **Status Feedback:**
   - UI displays status and error messages.
+- **Robust Data Handling:**
+  - Dates are aggressively and consistently converted from Excel serials or text to `yyyy-MM-dd` format.
+  - Boolean columns (e.g., "Reoccurring") are normalized to `True`/`False` (not `TRUE`/`FALSE`).
 
 ## File Structure
 
@@ -63,9 +69,20 @@ IMLoader/
   - `ExtractUnitNumberFromFileName` uses regex to extract the unit number after `CT` and leading zeros.
   - Only columns present in the master are merged; extra columns in source files are ignored.
   - Data is always appended after the last used row in the master.
+  - **Date columns** (e.g., "Last Date", "Next Date") are aggressively converted from Excel serials or text to `yyyy-MM-dd` format at multiple stages.
+  - **Boolean columns** (e.g., "Reoccurring") are normalized to `True`/`False` (never `TRUE`/`FALSE`).
+  - **Sorting:**
+    - All merged data is sorted by Unit number (ascending).
+    - Each file's data is sorted by the "Equipment ID" column (ascending, string sort) before merging.
+  - **Row 2 Data Start:**
+    - All data is read starting from row 2 (row 1 is always header).
 - **UI**
   - Built with WPF (XAML + C# code-behind).
   - Uses `ObservableCollection<ExcelFileModel>` for file tracking and data binding.
+  - **Modern UI:**
+    - Light blue theme, modern buttons, styled dropdowns, and responsive layout.
+    - The "Files to Merge" section auto-scales with window size.
+    - The sheet selection dropdown in the Master File section is right-aligned for clarity.
 - **Extensibility**
   - To add new data validation, transformation, or support for other file formats, extend `ExcelHelper`.
   - For more advanced UI, consider using MVVM and data templates.
@@ -73,9 +90,10 @@ IMLoader/
 ## Limitations & Assumptions
 
 - Only `.xlsx` files are supported (not `.xls`).
-- Assumes row 1 is always the header, row 2 is a filter row, and data starts at row 3.
+- Assumes row 1 is always the header, and data starts at row 2.
 - The unit number must be present in the filename in the form `CT0*<number>` (e.g., `CT004`, `CT21`).
 - Only merges data from the selected sheet/tab in each file.
+- The "Equipment ID" column must exist in each file to enable per-file sorting.
 
 ## Authors & Maintainers
 

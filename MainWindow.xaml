@@ -5,8 +5,85 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:IMLoader"
         mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
-    <Grid Margin="20">
+        Title="IMLoader - Excel Merge Tool" Height="520" Width="900"
+        Background="#F4F9FD">
+    <Window.Resources>
+        <!-- Light Blue Theme Colors -->
+        <Color x:Key="PrimaryBlue">#3498db</Color>
+        <Color x:Key="PrimaryBlueLight">#eaf6fb</Color>
+        <Color x:Key="AccentBlue">#5dade2</Color>
+        <Color x:Key="ButtonHover">#2980b9</Color>
+        <Color x:Key="BorderGray">#d6eaf8</Color>
+        <SolidColorBrush x:Key="PrimaryBlueBrush" Color="{StaticResource PrimaryBlue}"/>
+        <SolidColorBrush x:Key="PrimaryBlueLightBrush" Color="{StaticResource PrimaryBlueLight}"/>
+        <SolidColorBrush x:Key="AccentBlueBrush" Color="{StaticResource AccentBlue}"/>
+        <SolidColorBrush x:Key="ButtonHoverBrush" Color="{StaticResource ButtonHover}"/>
+        <SolidColorBrush x:Key="BorderGrayBrush" Color="{StaticResource BorderGray}"/>
+        <Style x:Key="ModernButton" TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource PrimaryBlueBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="Width" Value="180"/>
+            <Setter Property="Height" Value="44"/>
+            <Setter Property="Margin" Value="0,0,16,0"/>
+            <Setter Property="Padding" Value="0,4"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="8" SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="{StaticResource ButtonHoverBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Background" Value="#BFD6EA"/>
+                                <Setter Property="Foreground" Value="#7A8FA6"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="ModernComboBox" TargetType="ComboBox">
+            <Setter Property="FontSize" Value="15"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="Height" Value="38"/>
+            <Setter Property="MinWidth" Value="160"/>
+            <Setter Property="Background" Value="{StaticResource PrimaryBlueLightBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderGrayBrush}"/>
+            <Setter Property="BorderThickness" Value="1.2"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+        </Style>
+        <Style x:Key="ModernGroupBox" TargetType="GroupBox">
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="17"/>
+            <Setter Property="Foreground" Value="#2C3E50"/>
+            <Setter Property="BorderBrush" Value="{StaticResource PrimaryBlueBrush}"/>
+            <Setter Property="BorderThickness" Value="1.5"/>
+            <Setter Property="Margin" Value="0,0,0,14"/>
+            <Setter Property="Padding" Value="10,8,10,8"/>
+            <Setter Property="Background" Value="{StaticResource PrimaryBlueLightBrush}"/>
+        </Style>
+        <Style TargetType="TextBlock">
+            <Setter Property="FontSize" Value="15"/>
+            <Setter Property="Foreground" Value="#2C3E50"/>
+        </Style>
+        <Style TargetType="ListBox">
+            <Setter Property="FontSize" Value="15"/>
+            <Setter Property="Background" Value="{StaticResource PrimaryBlueLightBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderGrayBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="6"/>
+            <Setter Property="Margin" Value="0,0,0,0"/>
+        </Style>
+    </Window.Resources>
+    <Grid Margin="24">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
@@ -19,29 +96,39 @@
         </Grid.ColumnDefinitions>
 
         <!-- Master File Section -->
-        <GroupBox Header="Master File" Grid.Row="0" Margin="0,0,0,10">
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <Button x:Name="BtnSelectMaster" Content="Select Master File" Width="150" Margin="0,0,10,0" Click="BtnSelectMaster_Click"/>
-                <TextBlock x:Name="TxtMasterFilePath" VerticalAlignment="Center" Width="350" TextTrimming="CharacterEllipsis"/>
-                <TextBlock Text="Sheet:" Margin="20,0,5,0" VerticalAlignment="Center"/>
-                <ComboBox x:Name="CmbMasterSheet" Width="180" VerticalAlignment="Center"/>
-            </StackPanel>
+        <GroupBox Header="Master File" Grid.Row="0" Style="{StaticResource ModernGroupBox}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Button x:Name="BtnSelectMaster" Content="Select Master File" Style="{StaticResource ModernButton}" Click="BtnSelectMaster_Click" Grid.Column="0"/>
+                <TextBlock x:Name="TxtMasterFilePath" VerticalAlignment="Center" Width="350" TextTrimming="CharacterEllipsis" Margin="0,0,10,0" Grid.Column="1"/>
+                <TextBlock Text="Sheet:" Margin="10,0,5,0" VerticalAlignment="Center" Grid.Column="2" HorizontalAlignment="Right"/>
+                <ComboBox x:Name="CmbMasterSheet" Style="{StaticResource ModernComboBox}" VerticalAlignment="Center" Grid.Column="3" HorizontalAlignment="Right"/>
+            </Grid>
         </GroupBox>
 
         <!-- Additional Files Section -->
-        <GroupBox Header="Files to Merge" Grid.Row="1" Margin="0,0,0,10">
-            <StackPanel>
-                <Button x:Name="BtnAddFiles" Content="Add Files to Merge" Width="150" Margin="0,0,0,10" Click="BtnAddFiles_Click"/>
-                <ListBox x:Name="ListFiles" Height="120"/>
-            </StackPanel>
+        <GroupBox Header="Files to Merge" Grid.Row="1" Style="{StaticResource ModernGroupBox}" Grid.RowSpan="2">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Button x:Name="BtnAddFiles" Content="Add Files to Merge" Style="{StaticResource ModernButton}" Margin="0,0,0,10" Click="BtnAddFiles_Click" Grid.Row="0"/>
+                <ListBox x:Name="ListFiles" Grid.Row="1" Margin="0" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" MinHeight="120"/>
+            </Grid>
         </GroupBox>
 
         <!-- Actions -->
         <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,10,0,0">
-            <Button x:Name="BtnMergeAndSave" Content="Merge and Save" Width="150" Click="BtnMergeAndSave_Click"/>
+            <Button x:Name="BtnMergeAndSave" Content="Merge and Save" Style="{StaticResource ModernButton}"/>
         </StackPanel>
 
         <!-- Status/Progress -->
-        <TextBlock x:Name="TxtStatus" Grid.Row="4" Margin="0,10,0,0" Foreground="DarkGreen"/>
+        <TextBlock x:Name="TxtStatus" Grid.Row="4" Margin="0,10,0,0" Foreground="DarkGreen" FontWeight="SemiBold" FontSize="15"/>
     </Grid>
 </Window>
