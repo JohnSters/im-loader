@@ -63,7 +63,37 @@ namespace IMLoader
                 if (!wb.Worksheets.TryGetWorksheet(sheetName, out var ws) || ws == null)
                     throw new ArgumentException($"Sheet '{sheetName}' not found in file '{filePath}'.");
                 var headers = ws.Row(1).CellsUsed().Select(c => c.GetString()).ToList();
-                var headerMap = masterHeaders.Select(h => headers.IndexOf(h)).ToList();
+
+                // New: Build header map with partial matching
+                var headerMap = new List<int>();
+                for (int i = 0; i < masterHeaders.Count; i++)
+                {
+                    string masterHeader = masterHeaders[i].Trim();
+                    int exactIdx = headers.FindIndex(h => string.Equals(h.Trim(), masterHeader, StringComparison.OrdinalIgnoreCase));
+                    if (exactIdx >= 0)
+                    {
+                        headerMap.Add(exactIdx);
+                        continue;
+                    }
+                    // Partial match: find the merge header that is a substring of the master header or vice versa, prefer the longest match
+                    int bestIdx = -1;
+                    int bestLength = 0;
+                    for (int j = 0; j < headers.Count; j++)
+                    {
+                        string mergeHeader = headers[j].Trim();
+                        if (masterHeader.IndexOf(mergeHeader, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                            mergeHeader.IndexOf(masterHeader, StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            int matchLength = Math.Max(masterHeader.Length, mergeHeader.Length);
+                            if (matchLength > bestLength)
+                            {
+                                bestLength = matchLength;
+                                bestIdx = j;
+                            }
+                        }
+                    }
+                    headerMap.Add(bestIdx);
+                }
                 string unitNumber = ExtractUnitNumberFromFileName(filePath);
                 int row = 3;
                 while (true)
