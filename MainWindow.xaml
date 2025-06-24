@@ -1,0 +1,47 @@
+﻿<Window x:Class="IMLoader.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:IMLoader"
+        mc:Ignorable="d"
+        Title="MainWindow" Height="450" Width="800">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- Master File Section -->
+        <GroupBox Header="Master File" Grid.Row="0" Margin="0,0,0,10">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <Button x:Name="BtnSelectMaster" Content="Select Master File" Width="150" Margin="0,0,10,0" Click="BtnSelectMaster_Click"/>
+                <TextBlock x:Name="TxtMasterFilePath" VerticalAlignment="Center" Width="350" TextTrimming="CharacterEllipsis"/>
+                <TextBlock Text="Sheet:" Margin="20,0,5,0" VerticalAlignment="Center"/>
+                <ComboBox x:Name="CmbMasterSheet" Width="180" VerticalAlignment="Center"/>
+            </StackPanel>
+        </GroupBox>
+
+        <!-- Additional Files Section -->
+        <GroupBox Header="Files to Merge" Grid.Row="1" Margin="0,0,0,10">
+            <StackPanel>
+                <Button x:Name="BtnAddFiles" Content="Add Files to Merge" Width="150" Margin="0,0,0,10" Click="BtnAddFiles_Click"/>
+                <ListBox x:Name="ListFiles" Height="120"/>
+            </StackPanel>
+        </GroupBox>
+
+        <!-- Actions -->
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,10,0,0">
+            <Button x:Name="BtnMergeAndSave" Content="Merge and Save" Width="150" Click="BtnMergeAndSave_Click"/>
+        </StackPanel>
+
+        <!-- Status/Progress -->
+        <TextBlock x:Name="TxtStatus" Grid.Row="4" Margin="0,10,0,0" Foreground="DarkGreen"/>
+    </Grid>
+</Window>
