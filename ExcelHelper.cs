@@ -111,6 +111,27 @@ namespace IMLoader
             }
         }
 
+        private static string NormalizeBooleanValue(IXLCell cell)
+        {
+            if (cell == null) return "False";
+
+            if (cell.DataType == XLDataType.Boolean)
+            {
+                return cell.GetBoolean() ? "True" : "False";
+            }
+            
+            if (cell.DataType == XLDataType.Text)
+            {
+                string value = cell.GetString().Trim();
+                if (bool.TryParse(value, out bool boolValue))
+                {
+                    return boolValue ? "True" : "False";
+                }
+            }
+
+            return "False";
+        }
+
         public static List<string> GetSheetNames(string filePath)
         {
             var sheetNames = new List<string>();
@@ -164,6 +185,19 @@ namespace IMLoader
             int masterLastDateIdx = masterHeaders.FindIndex(h => h.Trim().Equals("Last Date", StringComparison.OrdinalIgnoreCase));
             int masterIntervalIdx = masterHeaders.FindIndex(h => h.Trim().Equals("Desired Interval", StringComparison.OrdinalIgnoreCase));
 
+            // Format existing date columns and normalize boolean values in master file
+            if (masterReoccurringIdx != -1)
+            {
+                var reoccurringColumn = masterWs.Column(masterReoccurringIdx + 1);
+                foreach (var cell in reoccurringColumn.CellsUsed())
+                {
+                    if (cell.Address.RowNumber > 2) // Skip header and filter rows
+                    {
+                        cell.Value = NormalizeBooleanValue(cell);
+                    }
+                }
+            }
+
             // Format existing date columns in master file
             if (masterLastDateIdx != -1)
             {
@@ -205,7 +239,15 @@ namespace IMLoader
                         var rowData = new List<XLCellValue>();
                         for (int col = 1; col <= masterColCount; col++)
                         {
-                            rowData.Add(row.Cell(col).Value);
+                            var cell = row.Cell(col);
+                            if (col == masterReoccurringIdx)
+                            {
+                                rowData.Add(NormalizeBooleanValue(cell));
+                            }
+                            else
+                            {
+                                rowData.Add(cell.Value);
+                            }
                         }
                         rowsToMerge.Add((unitNum, rowData));
                     }
@@ -293,8 +335,14 @@ namespace IMLoader
                                 FormatDateCell(lastDateCell);
 
                                 bool isReoccurring = false;
-                                if (reoccurringCell.DataType == XLDataType.Boolean) isReoccurring = reoccurringCell.GetBoolean();
-                                else if (reoccurringCell.DataType == XLDataType.Text) bool.TryParse(reoccurringCell.GetString(), out isReoccurring);
+                                if (reoccurringCell.DataType == XLDataType.Boolean)
+                                {
+                                    isReoccurring = reoccurringCell.GetBoolean();
+                                }
+                                else if (reoccurringCell.DataType == XLDataType.Text)
+                                {
+                                    bool.TryParse(reoccurringCell.GetString().Trim(), out isReoccurring);
+                                }
 
                                 if (!isReoccurring && (nextDateCell == null || nextDateCell.IsEmpty()))
                                 {
@@ -339,17 +387,9 @@ namespace IMLoader
                                     }
                                 }
                                 // Handle Reoccurring column
-                                else if (col == masterReoccurringIdx && sourceCell.DataType == XLDataType.Text)
+                                else if (col == masterReoccurringIdx)
                                 {
-                                    string originalValue = sourceCell.GetString().Trim();
-                                    if (bool.TryParse(originalValue, out bool boolValue))
-                                    {
-                                        rowData.Add(boolValue ? "True" : "False");
-                                    }
-                                    else
-                                    {
-                                        rowData.Add(sourceCell.Value);
-                                    }
+                                    rowData.Add(NormalizeBooleanValue(sourceCell));
                                 }
                                 else
                                 {
