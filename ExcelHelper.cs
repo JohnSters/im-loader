@@ -8,23 +8,47 @@ namespace IMLoader
 {
     public static class ExcelHelper
     {
-        private static bool TryParseDate(IXLCell cell, out DateTime date)
+        private static bool TryParseDate(IXLCell cell, out DateTime resultDate)
         {
-            date = default;
-            if (cell.DataType == XLDataType.DateTime)
+            resultDate = default;
+            try
             {
-                date = cell.GetDateTime();
-                return true;
-            }
-            string dateString = cell.GetString().Trim();
-            if (string.IsNullOrWhiteSpace(dateString)) return false;
+                // First try: If it's already a DateTime
+                if (cell.DataType == XLDataType.DateTime)
+                {
+                    resultDate = cell.GetDateTime();
+                    return true;
+                }
 
-            string[] formats = { "yyyy/MM/dd", "dd/MM/yyyy", "MM/dd/yyyy", "yyyy-MM-dd", "dd-MM-yyyy", "MM-dd-yyyy", "M/d/yyyy" };
-            if (DateTime.TryParseExact(dateString, formats, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out date))
-            {
-                return true;
+                // Second try: If it's a number, try to convert from Excel serial date
+                if (cell.DataType == XLDataType.Number && cell.TryGetValue(out double serialNumber))
+                {
+                    if (IsExcelDateSerial(serialNumber))
+                    {
+                        resultDate = DateTime.FromOADate(serialNumber);
+                        return true;
+                    }
+                }
+
+                // Third try: Parse as string with various formats
+                string dateString = cell.GetString().Trim();
+                if (!string.IsNullOrWhiteSpace(dateString))
+                {
+                    string[] formats = { "yyyy/MM/dd", "dd/MM/yyyy", "MM/dd/yyyy", "yyyy-MM-dd", "dd-MM-yyyy", "MM-dd-yyyy", "M/d/yyyy" };
+                    if (DateTime.TryParseExact(dateString, formats, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out DateTime parsedDate))
+                    {
+                        resultDate = parsedDate;
+                        return true;
+                    }
+                    if (DateTime.TryParse(dateString, out DateTime parsedDate2))
+                    {
+                        resultDate = parsedDate2;
+                        return true;
+                    }
+                }
             }
-            return DateTime.TryParse(dateString, out date);
+            catch { }
+            return false;
         }
 
         private static bool IsExcelDateSerial(double number)
@@ -39,38 +63,51 @@ namespace IMLoader
         {
             if (cell == null) return;
 
-            // If it's already a DateTime, just format it
-            if (cell.DataType == XLDataType.DateTime)
+            try
             {
-                cell.Style.NumberFormat.Format = "yyyy-MM-dd";
-                return;
-            }
-
-            // If it's a number that could be an Excel date serial
-            if (cell.DataType == XLDataType.Number && cell.TryGetValue(out double serialNumber))
-            {
-                if (IsExcelDateSerial(serialNumber))
+                // If it's a number, try to convert from Excel serial date first
+                if (cell.DataType == XLDataType.Number && cell.TryGetValue(out double serialNumber))
                 {
-                    try
+                    if (IsExcelDateSerial(serialNumber))
                     {
-                        var date = DateTime.FromOADate(serialNumber);
-                        cell.Value = date;
-                        cell.Style.NumberFormat.Format = "yyyy-MM-dd";
-                        return;
+                        try
+                        {
+                            var convertedDate = DateTime.FromOADate(serialNumber);
+                            cell.Value = convertedDate;
+                            cell.Style.NumberFormat.Format = "yyyy-MM-dd";
+                            return;
+                        }
+                        catch { }
                     }
-                    catch { } // If conversion fails, fall through to default handling
                 }
-            }
 
-            // For text values, try to parse as date
-            if (cell.DataType == XLDataType.Text)
-            {
-                string value = cell.GetString().Trim();
-                if (TryParseDate(cell, out DateTime date))
+                // If it's already a DateTime, just format it
+                if (cell.DataType == XLDataType.DateTime)
                 {
-                    cell.Value = date;
+                    cell.Style.NumberFormat.Format = "yyyy-MM-dd";
+                    return;
+                }
+
+                // For text values or any other type, try to parse as date
+                if (TryParseDate(cell, out DateTime parsedDate))
+                {
+                    cell.Value = parsedDate;
                     cell.Style.NumberFormat.Format = "yyyy-MM-dd";
                 }
+            }
+            catch (Exception)
+            {
+                // If any error occurs during conversion, try one last time to convert from serial number
+                try
+                {
+                    if (cell.TryGetValue(out double lastChanceSerial) && IsExcelDateSerial(lastChanceSerial))
+                    {
+                        var finalDate = DateTime.FromOADate(lastChanceSerial);
+                        cell.Value = finalDate;
+                        cell.Style.NumberFormat.Format = "yyyy-MM-dd";
+                    }
+                }
+                catch { }
             }
         }
 
@@ -127,6 +164,30 @@ namespace IMLoader
             int masterLastDateIdx = masterHeaders.FindIndex(h => h.Trim().Equals("Last Date", StringComparison.OrdinalIgnoreCase));
             int masterIntervalIdx = masterHeaders.FindIndex(h => h.Trim().Equals("Desired Interval", StringComparison.OrdinalIgnoreCase));
 
+            // Format existing date columns in master file
+            if (masterLastDateIdx != -1)
+            {
+                var lastDateColumn = masterWs.Column(masterLastDateIdx + 1);
+                foreach (var cell in lastDateColumn.CellsUsed())
+                {
+                    if (cell.Address.RowNumber > 2) // Skip header and filter rows
+                    {
+                        FormatDateCell(cell);
+                    }
+                }
+            }
+            if (masterNextDateIdx != -1)
+            {
+                var nextDateColumn = masterWs.Column(masterNextDateIdx + 1);
+                foreach (var cell in nextDateColumn.CellsUsed())
+                {
+                    if (cell.Address.RowNumber > 2) // Skip header and filter rows
+                    {
+                        FormatDateCell(cell);
+                    }
+                }
+            }
+
             // Normalize existing "Reoccurring" data in master file
             if (masterReoccurringIdx != -1)
             {
@@ -154,9 +215,9 @@ namespace IMLoader
                 using var wb = new XLWorkbook(filePath);
                 if (!wb.Worksheets.TryGetWorksheet(sheetName, out var ws) || ws == null)
                     throw new ArgumentException($"Sheet '{sheetName}' not found in file '{filePath}'.");
+                
+                // Pre-format date columns in source file
                 var headers = ws.Row(1).CellsUsed().Select(c => c.GetString()).ToList();
-
-                // New: Build header map with partial matching
                 var headerMap = new List<int>();
                 for (int i = 0; i < masterHeaders.Count; i++)
                 {
@@ -165,27 +226,42 @@ namespace IMLoader
                     if (exactIdx >= 0)
                     {
                         headerMap.Add(exactIdx);
-                        continue;
-                    }
-                    // Partial match: find the merge header that is a substring of the master header or vice versa, prefer the longest match
-                    int bestIdx = -1;
-                    int bestLength = 0;
-                    for (int j = 0; j < headers.Count; j++)
-                    {
-                        string mergeHeader = headers[j].Trim();
-                        if (masterHeader.IndexOf(mergeHeader, StringComparison.OrdinalIgnoreCase) >= 0 ||
-                            mergeHeader.IndexOf(masterHeader, StringComparison.OrdinalIgnoreCase) >= 0)
+                        // Pre-format date columns in source file
+                        if ((i == masterLastDateIdx || i == masterNextDateIdx) && exactIdx >= 0)
                         {
-                            int matchLength = Math.Max(masterHeader.Length, mergeHeader.Length);
-                            if (matchLength > bestLength)
+                            var dateColumn = ws.Column(exactIdx + 1);
+                            foreach (var cell in dateColumn.CellsUsed())
                             {
-                                bestLength = matchLength;
-                                bestIdx = j;
+                                if (cell.Address.RowNumber > 2)
+                                {
+                                    FormatDateCell(cell);
+                                }
                             }
                         }
                     }
-                    headerMap.Add(bestIdx);
+                    else
+                    {
+                        // Partial match logic remains the same...
+                        int bestIdx = -1;
+                        int bestLength = 0;
+                        for (int j = 0; j < headers.Count; j++)
+                        {
+                            string mergeHeader = headers[j].Trim();
+                            if (masterHeader.IndexOf(mergeHeader, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                mergeHeader.IndexOf(masterHeader, StringComparison.OrdinalIgnoreCase) >= 0)
+                            {
+                                int matchLength = Math.Max(masterHeader.Length, mergeHeader.Length);
+                                if (matchLength > bestLength)
+                                {
+                                    bestLength = matchLength;
+                                    bestIdx = j;
+                                }
+                            }
+                        }
+                        headerMap.Add(bestIdx);
+                    }
                 }
+
                 string unitNumber = ExtractUnitNumberFromFileName(filePath);
                 int row = 2;
                 while (true)
@@ -206,6 +282,10 @@ namespace IMLoader
                         {
                             var nextDateCell = (srcNextDateIdx != -1) ? dataRow.Cell(srcNextDateIdx + 1) : null;
                             var reoccurringCell = dataRow.Cell(srcReoccurringIdx + 1);
+                            var lastDateCell = dataRow.Cell(srcLastDateIdx + 1);
+
+                            // Ensure Last Date is formatted before using it
+                            FormatDateCell(lastDateCell);
 
                             bool isReoccurring = false;
                             if (reoccurringCell.DataType == XLDataType.Boolean) isReoccurring = reoccurringCell.GetBoolean();
@@ -213,7 +293,6 @@ namespace IMLoader
 
                             if (!isReoccurring && (nextDateCell == null || nextDateCell.IsEmpty()))
                             {
-                                var lastDateCell = dataRow.Cell(srcLastDateIdx + 1);
                                 var intervalCell = dataRow.Cell(srcIntervalIdx + 1);
                                 if (TryParseDate(lastDateCell, out DateTime lastDate) && intervalCell.TryGetValue(out double intervalMonths))
                                 {
@@ -239,25 +318,37 @@ namespace IMLoader
                             newRow.Cell(1).Value = unitNumber;
                             continue;
                         }
+
                         int srcCol = headerMap[col];
                         if (srcCol >= 0)
                         {
                             var sourceCell = ws.Cell(row, srcCol + 1);
                             var targetCell = newRow.Cell(col + 1);
-                            targetCell.Value = sourceCell.Value; // Default copy
 
-                            // Handle date formatting for Next Date column
-                            if (col == masterNextDateIdx)
+                            // For date columns, ensure proper conversion before copying
+                            if (col == masterLastDateIdx || col == masterNextDateIdx)
                             {
-                                FormatDateCell(targetCell);
-                            }
-                            // Normalize 'Reoccurring' column on merge
-                            else if (col == masterReoccurringIdx && targetCell.DataType == XLDataType.Text)
-                            {
-                                string originalValue = targetCell.GetString().Trim();
-                                if (bool.TryParse(originalValue, out bool boolValue))
+                                if (TryParseDate(sourceCell, out DateTime dateValue))
                                 {
-                                    targetCell.Value = boolValue ? "True" : "False";
+                                    targetCell.Value = dateValue;
+                                    targetCell.Style.NumberFormat.Format = "yyyy-MM-dd";
+                                }
+                                else
+                                {
+                                    targetCell.Value = sourceCell.Value;
+                                    FormatDateCell(targetCell);
+                                }
+                            }
+                            else
+                            {
+                                targetCell.Value = sourceCell.Value;
+                                if (col == masterReoccurringIdx && targetCell.DataType == XLDataType.Text)
+                                {
+                                    string originalValue = targetCell.GetString().Trim();
+                                    if (bool.TryParse(originalValue, out bool boolValue))
+                                    {
+                                        targetCell.Value = boolValue ? "True" : "False";
+                                    }
                                 }
                             }
                         }
@@ -269,6 +360,29 @@ namespace IMLoader
                     row++;
                 }
             }
+
+            // Final pass to ensure all date columns are properly formatted
+            if (masterLastDateIdx != -1)
+            {
+                foreach (var cell in masterWs.Column(masterLastDateIdx + 1).CellsUsed())
+                {
+                    if (cell.Address.RowNumber > 2)
+                    {
+                        FormatDateCell(cell);
+                    }
+                }
+            }
+            if (masterNextDateIdx != -1)
+            {
+                foreach (var cell in masterWs.Column(masterNextDateIdx + 1).CellsUsed())
+                {
+                    if (cell.Address.RowNumber > 2)
+                    {
+                        FormatDateCell(cell);
+                    }
+                }
+            }
+
             masterWb.SaveAs(outputFilePath);
         }
     }
