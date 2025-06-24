@@ -27,6 +27,53 @@ namespace IMLoader
             return DateTime.TryParse(dateString, out date);
         }
 
+        private static bool IsExcelDateSerial(double number)
+        {
+            // Excel date serials typically fall between these values
+            // 1 = January 1, 1900
+            // 2958465 = December 31, 9999
+            return number >= 1 && number <= 2958465;
+        }
+
+        private static void FormatDateCell(IXLCell cell)
+        {
+            if (cell == null) return;
+
+            // If it's already a DateTime, just format it
+            if (cell.DataType == XLDataType.DateTime)
+            {
+                cell.Style.NumberFormat.Format = "yyyy-MM-dd";
+                return;
+            }
+
+            // If it's a number that could be an Excel date serial
+            if (cell.DataType == XLDataType.Number && cell.TryGetValue(out double serialNumber))
+            {
+                if (IsExcelDateSerial(serialNumber))
+                {
+                    try
+                    {
+                        var date = DateTime.FromOADate(serialNumber);
+                        cell.Value = date;
+                        cell.Style.NumberFormat.Format = "yyyy-MM-dd";
+                        return;
+                    }
+                    catch { } // If conversion fails, fall through to default handling
+                }
+            }
+
+            // For text values, try to parse as date
+            if (cell.DataType == XLDataType.Text)
+            {
+                string value = cell.GetString().Trim();
+                if (TryParseDate(cell, out DateTime date))
+                {
+                    cell.Value = date;
+                    cell.Style.NumberFormat.Format = "yyyy-MM-dd";
+                }
+            }
+        }
+
         public static List<string> GetSheetNames(string filePath)
         {
             var sheetNames = new List<string>();
@@ -199,8 +246,13 @@ namespace IMLoader
                             var targetCell = newRow.Cell(col + 1);
                             targetCell.Value = sourceCell.Value; // Default copy
 
+                            // Handle date formatting for Next Date column
+                            if (col == masterNextDateIdx)
+                            {
+                                FormatDateCell(targetCell);
+                            }
                             // Normalize 'Reoccurring' column on merge
-                            if (col == masterReoccurringIdx && targetCell.DataType == XLDataType.Text)
+                            else if (col == masterReoccurringIdx && targetCell.DataType == XLDataType.Text)
                             {
                                 string originalValue = targetCell.GetString().Trim();
                                 if (bool.TryParse(originalValue, out bool boolValue))
