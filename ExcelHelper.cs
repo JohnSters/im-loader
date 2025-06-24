@@ -80,6 +80,24 @@ namespace IMLoader
             int masterLastDateIdx = masterHeaders.FindIndex(h => h.Trim().Equals("Last Date", StringComparison.OrdinalIgnoreCase));
             int masterIntervalIdx = masterHeaders.FindIndex(h => h.Trim().Equals("Desired Interval", StringComparison.OrdinalIgnoreCase));
 
+            // Normalize existing "Reoccurring" data in master file
+            if (masterReoccurringIdx != -1)
+            {
+                var reoccurringColumn = masterWs.Column(masterReoccurringIdx + 1);
+                // Start from row 3 to skip header and filter rows
+                foreach (var cell in reoccurringColumn.CellsUsed(c => c.Address.RowNumber >= 3))
+                {
+                    if (cell.DataType == XLDataType.Text)
+                    {
+                        string originalValue = cell.GetString().Trim();
+                        if (bool.TryParse(originalValue, out bool boolValue))
+                        {
+                            cell.Value = boolValue ? "True" : "False";
+                        }
+                    }
+                }
+            }
+
             int masterColCount = masterHeaders.Count;
             var lastRow = masterWs.LastRowUsed();
             int masterLastRow = lastRow != null ? lastRow.RowNumber() : 1; // 1 = header row, so data starts at 2
@@ -122,7 +140,7 @@ namespace IMLoader
                     headerMap.Add(bestIdx);
                 }
                 string unitNumber = ExtractUnitNumberFromFileName(filePath);
-                int row = 3;
+                int row = 2;
                 while (true)
                 {
                     var dataRow = ws.Row(row);
@@ -177,8 +195,19 @@ namespace IMLoader
                         int srcCol = headerMap[col];
                         if (srcCol >= 0)
                         {
-                            var cell = ws.Cell(row, srcCol + 1);
-                            newRow.Cell(col + 1).Value = cell.Value;
+                            var sourceCell = ws.Cell(row, srcCol + 1);
+                            var targetCell = newRow.Cell(col + 1);
+                            targetCell.Value = sourceCell.Value; // Default copy
+
+                            // Normalize 'Reoccurring' column on merge
+                            if (col == masterReoccurringIdx && targetCell.DataType == XLDataType.Text)
+                            {
+                                string originalValue = targetCell.GetString().Trim();
+                                if (bool.TryParse(originalValue, out bool boolValue))
+                                {
+                                    targetCell.Value = boolValue ? "True" : "False";
+                                }
+                            }
                         }
                         else
                         {
