@@ -21,7 +21,6 @@ namespace IMLoader
             InitializeComponent();
             ListFiles.ItemsSource = _additionalFiles;
             ListFiles.SelectionChanged += ListFiles_SelectionChanged;
-            ListFiles.ItemTemplate = CreateFileTemplate();
         }
 
         private void BtnSelectMaster_Click(object sender, RoutedEventArgs e)
@@ -124,52 +123,6 @@ namespace IMLoader
             }
         }
 
-        private DataTemplate CreateFileTemplate()
-        {
-            var template = new DataTemplate(typeof(ExcelFileModel));
-            var spFactory = new FrameworkElementFactory(typeof(StackPanel));
-            spFactory.SetValue(StackPanel.OrientationProperty, Orientation.Horizontal);
-            spFactory.SetValue(StackPanel.MarginProperty, new Thickness(0, 0, 0, 5));
-
-            var tbFactory = new FrameworkElementFactory(typeof(TextBlock));
-            tbFactory.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding("FilePath") { Converter = new FileNameConverter() });
-            tbFactory.SetValue(TextBlock.WidthProperty, 280.0);
-            tbFactory.SetValue(TextBlock.MarginProperty, new Thickness(0, 0, 10, 0));
-            tbFactory.SetValue(TextBlock.VerticalAlignmentProperty, VerticalAlignment.Center);
-            spFactory.AppendChild(tbFactory);
-
-            var cbFactory = new FrameworkElementFactory(typeof(ComboBox));
-            cbFactory.SetBinding(ComboBox.ItemsSourceProperty, new System.Windows.Data.Binding("Sheets"));
-            cbFactory.SetBinding(ComboBox.SelectedItemProperty, new System.Windows.Data.Binding("SelectedSheet") { Mode = System.Windows.Data.BindingMode.TwoWay });
-            cbFactory.SetValue(ComboBox.WidthProperty, 180.0);
-            cbFactory.SetValue(ComboBox.MarginProperty, new Thickness(0, 0, 10, 0));
-            spFactory.AppendChild(cbFactory);
-
-            var btnFactory = new FrameworkElementFactory(typeof(Button));
-            btnFactory.SetValue(Button.ContentProperty, "✕");
-            btnFactory.SetValue(Button.WidthProperty, 30.0);
-            btnFactory.SetValue(Button.HeightProperty, 30.0);
-            btnFactory.SetValue(Button.BackgroundProperty, new SolidColorBrush(Color.FromRgb(231, 76, 60)));
-            btnFactory.SetValue(Button.ForegroundProperty, Brushes.White);
-            btnFactory.SetValue(Button.FontWeightProperty, FontWeights.Bold);
-            btnFactory.SetValue(Button.FontSizeProperty, 14.0);
-            btnFactory.SetValue(Button.BorderThicknessProperty, new Thickness(0));
-            btnFactory.SetValue(Button.CursorProperty, Cursors.Hand);
-            btnFactory.SetValue(Button.ToolTipProperty, "Remove this file");
-            btnFactory.AddHandler(Button.ClickEvent, new RoutedEventHandler(BtnRemoveFile_Click));
-
-            var borderFactory = new FrameworkElementFactory(typeof(Border));
-            borderFactory.SetValue(Border.CornerRadiusProperty, new CornerRadius(15));
-            borderFactory.SetValue(Border.BackgroundProperty, new SolidColorBrush(Color.FromRgb(231, 76, 60)));
-            borderFactory.SetValue(Border.WidthProperty, 30.0);
-            borderFactory.SetValue(Border.HeightProperty, 30.0);
-            borderFactory.AppendChild(btnFactory);
-
-            spFactory.AppendChild(borderFactory);
-
-            template.VisualTree = spFactory;
-            return template;
-        }
     }
 
     public class FileNameConverter : System.Windows.Data.IValueConverter

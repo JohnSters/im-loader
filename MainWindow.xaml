@@ -19,6 +19,7 @@
         <SolidColorBrush x:Key="AccentBlueBrush" Color="{StaticResource AccentBlue}"/>
         <SolidColorBrush x:Key="ButtonHoverBrush" Color="{StaticResource ButtonHover}"/>
         <SolidColorBrush x:Key="BorderGrayBrush" Color="{StaticResource BorderGray}"/>
+        <local:FileNameConverter x:Key="FileNameConverter"/>
         <Style x:Key="ModernButton" TargetType="Button">
             <Setter Property="Background" Value="{StaticResource PrimaryBlueBrush}"/>
             <Setter Property="Foreground" Value="White"/>
@@ -82,6 +83,60 @@
             <Setter Property="Padding" Value="6"/>
             <Setter Property="Margin" Value="0,0,0,0"/>
         </Style>
+        <Style x:Key="RemoveButtonStyle" TargetType="Button">
+            <Setter Property="Content" Value="✕"/>
+            <Setter Property="Width" Value="44"/>
+            <Setter Property="Height" Value="44"/>
+            <Setter Property="Background" Value="#E74C3C"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="FontSize" Value="18"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="ToolTip" Value="Remove this file"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" 
+                                CornerRadius="6"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Center" 
+                                            VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#C0392B"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter Property="Background" Value="#A93226"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <DataTemplate x:Key="FileItemTemplate" DataType="{x:Type local:ExcelFileModel}">
+            <Grid Margin="0,0,0,5" Height="44">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                
+                <!-- Left side: File name and dropdown -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding FilePath, Converter={StaticResource FileNameConverter}}" 
+                               Width="280" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                    <ComboBox ItemsSource="{Binding Sheets}" 
+                              SelectedItem="{Binding SelectedSheet, Mode=TwoWay}"
+                              Width="180" Style="{StaticResource ModernComboBox}"/>
+                </StackPanel>
+                
+                <!-- Right side: Remove button -->
+                <Button Style="{StaticResource RemoveButtonStyle}"
+                        Grid.Column="1" Click="BtnRemoveFile_Click"
+                        Margin="10,0,0,0"/>
+            </Grid>
+        </DataTemplate>
     </Window.Resources>
     <Grid Margin="24">
         <Grid.RowDefinitions>
@@ -119,7 +174,7 @@
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
                 <Button x:Name="BtnAddFiles" Content="Add Files to Merge" Style="{StaticResource ModernButton}" Margin="0,0,0,10" Click="BtnAddFiles_Click" Grid.Row="0"/>
-                <ListBox x:Name="ListFiles" Grid.Row="1" Margin="0" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" MinHeight="120"/>
+                <ListBox x:Name="ListFiles" Grid.Row="1" Margin="0" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" MinHeight="120" ItemTemplate="{StaticResource FileItemTemplate}"/>
             </Grid>
         </GroupBox>
 
